@@ -14,11 +14,13 @@ Exposes to frontend:
 import (
 	"boccho-ui/AnimationEngine"
 	"boccho-ui/Window"
+	"boccho-ui/config"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
-	"path/filepath"
+	"os/exec"
+	"runtime"
 	"sync"
 	"time"
 
@@ -30,6 +32,7 @@ type App struct {
 	activeWindows map[string]*Window.CharacterWindow
 	mu            sync.RWMutex
 	framesPath    string
+	cfg           config.Config
 }
 
 type CharacterWindowInfo struct {
@@ -40,21 +43,24 @@ type CharacterWindowInfo struct {
 }
 
 func NewApp() *App {
-	execPath, _ := os.Executable()
-	execDir := filepath.Dir(execPath)
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		fmt.Printf("Error loading config: %v, using defaults\n", err)
+		cfg = config.GetDefaultConfig()
+	}
 
 	return &App{
 		activeWindows: make(map[string]*Window.CharacterWindow),
-		framesPath:    filepath.Join(execDir, "Frames"),
+		framesPath:    cfg.FramesPath,
+		cfg:           cfg,
 	}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	if _, err := os.Stat(a.framesPath); os.IsNotExist(err) {
-		workDir, _ := os.Getwd()
-		a.framesPath = filepath.Join(workDir, "Frames")
+	if err := config.EnsureFramesDir(a.cfg); err != nil {
+		fmt.Printf("Error ensuring Frames directory: %v\n", err)
 	}
 
 	fmt.Printf("Frames path: %s\n", a.framesPath)
@@ -191,4 +197,106 @@ func (a *App) GetPreviewImageBase64(characterName string) string {
 	}
 
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+}
+
+func (a *App) GetPreviewFrames(characterName string, maxFrames int) []string {
+	charPath := AnimationEngine.GetCharacterFramesPath(a.framesPath, characterName)
+
+	entries, err := os.ReadDir(charPath)
+	if err != nil {
+		return []string{}
+	}
+
+	var frames []string
+	count := 0
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		ext := ""
+		if len(name) > 4 {
+			ext = name[len(name)-4:]
+		}
+
+		if ext != ".png" && ext != ".jpg" && ext != ".PNG" && ext != ".JPG" {
+			continue
+		}
+
+		framePath := charPath + "/" + name
+		data, err := os.ReadFile(framePath)
+		if err != nil {
+			continue
+		}
+
+		frames = append(frames, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(data))
+		count++
+
+		if maxFrames > 0 && count >= maxFrames {
+			break
+		}
+	}
+
+	return frames
+}
+
+func (a *App) OpenFramesDir() error {
+	framesPath := a.cfg.FramesPath
+
+	if err := config.EnsureFramesDir(a.cfg); err != nil {
+		return err
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("explorer", framesPath)
+	case "darwin":
+		cmd = exec.Command("open", framesPath)
+	default:
+		cmd = exec.Command("xdg-open", framesPath)
+	}
+
+	return cmd.Start()
+}
+
+func (a *App) OpenConfig() error {
+	configPath := config.GetConfigPath()
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if err := config.SaveConfig(a.cfg); err != nil {
+			return err
+		}
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("notepad", configPath)
+	case "darwin":
+		cmd = exec.Command("open", "-t", configPath)
+	default:
+		editors := []string{"xdg-open", "nano", "vi"}
+		for _, editor := range editors {
+			if _, err := exec.LookPath(editor); err == nil {
+				cmd = exec.Command(editor, configPath)
+				break
+			}
+		}
+		if cmd == nil {
+			cmd = exec.Command("xdg-open", configPath)
+		}
+	}
+
+	return cmd.Start()
+}
+
+func (a *App) GetFramesPath() string {
+	return a.cfg.FramesPath
+}
+
+func (a *App) GetConfigPath() string {
+	return config.GetConfigPath()
 }

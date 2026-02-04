@@ -11,7 +11,17 @@ export function GetActiveWindows():Promise<Array<main.CharacterWindowInfo>>;
 
 export function GetCharacters():Promise<Array<AnimationEngine.CharacterInfo>>;
 
+export function GetConfigPath():Promise<string>;
+
+export function GetFramesPath():Promise<string>;
+
+export function GetPreviewFrames(arg1:string,arg2:number):Promise<Array<string>>;
+
 export function GetPreviewImageBase64(arg1:string):Promise<string>;
+
+export function OpenConfig():Promise<void>;
+
+export function OpenFramesDir():Promise<void>;
 
 export function SetCharacterScale(arg1:string,arg2:number):Promise<boolean>;
 

@@ -3,11 +3,12 @@ App.tsx - Main character manager UI
 
 Components:
 - App: Main application component with character grid and active windows list
-- Character cards with preview images
+- AnimatedPreview: Component that cycles through frames for animation preview
+- Character cards with animated preview images
 - Active windows with scale slider
 */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import { CharacterInfo, CharacterWindowInfo } from './types';
 import {
@@ -16,31 +17,75 @@ import {
   DestroyCharacter,
   GetActiveWindows,
   SetCharacterScale,
-  GetPreviewImageBase64,
+  GetPreviewFrames,
+  OpenFramesDir,
+  OpenConfig,
 } from '../wailsjs/go/main/App';
+
+const MAX_PREVIEW_FRAMES = 16;
+const ANIMATION_FPS = 12;
+
+function AnimatedPreview({ characterName }: { characterName: string }) {
+  const [frames, setFrames] = useState<string[]>([]);
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const intervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    GetPreviewFrames(characterName, MAX_PREVIEW_FRAMES).then((f) => {
+      setFrames(f || []);
+    });
+  }, [characterName]);
+
+  useEffect(() => {
+    if (isHovered && frames.length > 1) {
+      intervalRef.current = window.setInterval(() => {
+        setCurrentFrame((prev) => (prev + 1) % frames.length);
+      }, 1000 / ANIMATION_FPS);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      setCurrentFrame(0);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isHovered, frames.length]);
+
+  if (frames.length === 0) {
+    return (
+      <div className="preview-placeholder">
+        {characterName.charAt(0).toUpperCase()}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={frames[currentFrame]}
+      alt={characterName}
+      className="preview-image"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    />
+  );
+}
 
 function App() {
   const [characters, setCharacters] = useState<CharacterInfo[]>([]);
-  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [activeWindows, setActiveWindows] = useState<CharacterWindowInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadCharacters = useCallback(async () => {
+    setLoading(true);
     try {
       const chars = await GetCharacters();
       setCharacters(chars || []);
-
-      const previewPromises = (chars || []).map(async (char) => {
-        const preview = await GetPreviewImageBase64(char.name);
-        return { name: char.name, preview };
-      });
-
-      const previewResults = await Promise.all(previewPromises);
-      const previewMap: Record<string, string> = {};
-      previewResults.forEach(({ name, preview }) => {
-        if (preview) previewMap[name] = preview;
-      });
-      setPreviews(previewMap);
     } catch (err) {
       console.error('Failed to load characters:', err);
     }
@@ -88,39 +133,62 @@ function App() {
     }
   };
 
+  const handleOpenFrames = async () => {
+    try {
+      await OpenFramesDir();
+    } catch (err) {
+      console.error('Failed to open frames directory:', err);
+    }
+  };
+
+  const handleOpenConfig = async () => {
+    try {
+      await OpenConfig();
+    } catch (err) {
+      console.error('Failed to open config:', err);
+    }
+  };
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Boccho Desktop</h1>
-        <p className="subtitle">Character Manager</p>
+        <div className="header-left">
+          <h1>Boccho Desktop</h1>
+          <p className="subtitle">Character Manager</p>
+        </div>
+        <div className="header-right">
+          <button className="btn btn-toolbar" onClick={handleOpenFrames}>
+            Open Frames Dir
+          </button>
+          <button className="btn btn-toolbar" onClick={handleOpenConfig}>
+            Open Config
+          </button>
+        </div>
       </header>
 
       <main className="app-content">
         <section className="section">
-          <h2 className="section-title">Available Characters</h2>
+          <div className="section-header">
+            <h2 className="section-title">Available Characters</h2>
+            <button className="btn btn-refresh" onClick={loadCharacters}>
+              Refresh
+            </button>
+          </div>
           {loading ? (
             <div className="loading">Loading characters...</div>
           ) : characters.length === 0 ? (
             <div className="empty-state">
               <p>No characters found</p>
-              <p className="hint">Add character folders to the Frames directory</p>
+              <p className="hint">
+                Add character folders to the Frames directory
+              </p>
             </div>
           ) : (
             <div className="character-grid">
               {characters.map((char) => (
                 <div key={char.name} className="character-card">
                   <div className="character-preview">
-                    {previews[char.name] ? (
-                      <img
-                        src={previews[char.name]}
-                        alt={char.name}
-                        className="preview-image"
-                      />
-                    ) : (
-                      <div className="preview-placeholder">
-                        {char.name.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    <AnimatedPreview characterName={char.name} />
                   </div>
                   <div className="character-info">
                     <span className="character-name">{char.name}</span>

@@ -18,8 +18,28 @@ export function GetCharacters() {
   return window['go']['main']['App']['GetCharacters']();
 }
 
+export function GetConfigPath() {
+  return window['go']['main']['App']['GetConfigPath']();
+}
+
+export function GetFramesPath() {
+  return window['go']['main']['App']['GetFramesPath']();
+}
+
+export function GetPreviewFrames(arg1, arg2) {
+  return window['go']['main']['App']['GetPreviewFrames'](arg1, arg2);
+}
+
 export function GetPreviewImageBase64(arg1) {
   return window['go']['main']['App']['GetPreviewImageBase64'](arg1);
+}
+
+export function OpenConfig() {
+  return window['go']['main']['App']['OpenConfig']();
+}
+
+export function OpenFramesDir() {
+  return window['go']['main']['App']['OpenFramesDir']();
 }
 
 export function SetCharacterScale(arg1, arg2) {
