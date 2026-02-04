@@ -13,6 +13,7 @@ Exposes to frontend:
 
 import (
 	"boccho-ui/AnimationEngine"
+	"boccho-ui/PackManagement"
 	"boccho-ui/Window"
 	"boccho-ui/config"
 	"context"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
@@ -299,4 +301,29 @@ func (a *App) GetFramesPath() string {
 
 func (a *App) GetConfigPath() string {
 	return config.GetConfigPath()
+}
+
+func (a *App) BrowseBfkFile() string {
+	filePath, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Select Boccho Frame Pack",
+		Filters: []wailsRuntime.FileFilter{
+			{
+				DisplayName: "Boccho Frame Pack (*.bfk)",
+				Pattern:     "*.bfk",
+			},
+		},
+	})
+	if err != nil {
+		fmt.Printf("Error opening file dialog: %v\n", err)
+		return ""
+	}
+	return filePath
+}
+
+func (a *App) GetBfkPackInfo(filePath string) PackManagement.PackInfo {
+	return PackManagement.GetPackInfo(filePath)
+}
+
+func (a *App) InstallBfkPack(filePath string) error {
+	return PackManagement.InstallPack(filePath, a.cfg.FramesPath)
 }

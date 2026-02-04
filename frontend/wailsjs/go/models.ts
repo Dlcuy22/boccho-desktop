@@ -21,6 +21,31 @@ export namespace AnimationEngine {
 
 }
 
+export namespace PackManagement {
+	
+	export class PackInfo {
+	    filePath: string;
+	    packName: string;
+	    characters: string[];
+	    previewImage: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.filePath = source["filePath"];
+	        this.packName = source["packName"];
+	        this.characters = source["characters"];
+	        this.previewImage = source["previewImage"];
+	        this.error = source["error"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class CharacterWindowInfo {

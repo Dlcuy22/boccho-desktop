@@ -33,7 +33,7 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:     "Boccho Desktop",
-		Width:     480,
+		Width:     550,
 		Height:    600,
 		MinWidth:  400,
 		MinHeight: 500,

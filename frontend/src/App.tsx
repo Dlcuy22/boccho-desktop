@@ -4,13 +4,13 @@ App.tsx - Main character manager UI
 Components:
 - App: Main application component with character grid and active windows list
 - AnimatedPreview: Component that cycles through frames for animation preview
-- Character cards with animated preview images
-- Active windows with scale slider
+- AddDropdown: Dropdown menu for adding packs (from Link or .bfk)
+- AddPackModal: Modal for confirming pack installation with preview
 */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { CharacterInfo, CharacterWindowInfo } from './types';
+import { CharacterInfo, CharacterWindowInfo, PackInfo } from './types';
 import {
   GetCharacters,
   SpawnCharacter,
@@ -20,7 +20,13 @@ import {
   GetPreviewFrames,
   OpenFramesDir,
   OpenConfig,
+  BrowseBfkFile,
+  GetBfkPackInfo,
+  InstallBfkPack,
 } from '../wailsjs/go/main/App';
+
+import linkIcon from './assets/images/link.svg';
+import plusIcon from './assets/images/Plus_button.svg';
 
 const MAX_PREVIEW_FRAMES = 16;
 const ANIMATION_FPS = 12;
@@ -76,10 +82,116 @@ function AnimatedPreview({ characterName }: { characterName: string }) {
   );
 }
 
+interface AddDropdownProps {
+  onAddFromFile: () => void;
+  onAddFromLink: () => void;
+}
+
+function AddDropdown({ onAddFromFile, onAddFromLink }: AddDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="add-dropdown" ref={dropdownRef}>
+      <button
+        className="btn btn-add"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        import
+      </button>
+      {isOpen && (
+        <div className="add-dropdown-menu">
+          <button
+            className="add-dropdown-item"
+            onClick={() => {
+              onAddFromLink();
+              setIsOpen(false);
+            }}
+          >
+            <div className="add-dropdown-icon">
+              <img src={linkIcon} alt="" />
+            </div>
+            <span>From Link</span>
+          </button>
+          <button
+            className="add-dropdown-item"
+            onClick={() => {
+              onAddFromFile();
+              setIsOpen(false);
+            }}
+          >
+            <div className="add-dropdown-icon">
+              <img src={plusIcon} alt="" />
+            </div>
+            <span>From .bfk</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface AddPackModalProps {
+  packInfo: PackInfo;
+  onInstall: () => void;
+  onCancel: () => void;
+  installing: boolean;
+}
+
+function AddPackModal({ packInfo, onInstall, onCancel, installing }: AddPackModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Install Pack</h3>
+          <p className="modal-subtitle">{packInfo.packName}</p>
+        </div>
+
+        {packInfo.previewImage && (
+          <div className="modal-preview">
+            <img src={packInfo.previewImage} alt="Preview" />
+          </div>
+        )}
+
+        {packInfo.error ? (
+          <p className="modal-error">{packInfo.error}</p>
+        ) : (
+          <p className="modal-info">
+            Characters: <span>{packInfo.characters.join(', ')}</span>
+          </p>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn btn-cancel" onClick={onCancel} disabled={installing}>
+            Cancel
+          </button>
+          {!packInfo.error && (
+            <button className="btn btn-install" onClick={onInstall} disabled={installing}>
+              {installing ? 'Installing...' : 'Install'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [characters, setCharacters] = useState<CharacterInfo[]>([]);
   const [activeWindows, setActiveWindows] = useState<CharacterWindowInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [packInfo, setPackInfo] = useState<PackInfo | null>(null);
+  const [installing, setInstalling] = useState(false);
 
   const loadCharacters = useCallback(async () => {
     setLoading(true);
@@ -149,6 +261,41 @@ function App() {
     }
   };
 
+  const handleAddFromFile = async () => {
+    try {
+      const filePath = await BrowseBfkFile();
+      if (!filePath) return;
+
+      const info = await GetBfkPackInfo(filePath);
+      setPackInfo(info);
+    } catch (err) {
+      console.error('Failed to browse pack:', err);
+    }
+  };
+
+  const handleAddFromLink = () => {
+    // TODO: Implement add from link
+    console.log('Add from link - not implemented yet');
+  };
+
+  const handleInstallPack = async () => {
+    if (!packInfo) return;
+
+    setInstalling(true);
+    try {
+      await InstallBfkPack(packInfo.filePath);
+      setPackInfo(null);
+      loadCharacters();
+    } catch (err) {
+      console.error('Failed to install pack:', err);
+    }
+    setInstalling(false);
+  };
+
+  const handleCancelPack = () => {
+    setPackInfo(null);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -157,6 +304,10 @@ function App() {
           <p className="subtitle">Character Manager</p>
         </div>
         <div className="header-right">
+          <AddDropdown
+            onAddFromFile={handleAddFromFile}
+            onAddFromLink={handleAddFromLink}
+          />
           <button className="btn btn-toolbar" onClick={handleOpenFrames}>
             Open Frames Dir
           </button>
@@ -257,6 +408,15 @@ function App() {
       <footer className="app-footer">
         <p>Arrow Keys: Resize | Escape: Close Window | Drag: Move</p>
       </footer>
+
+      {packInfo && (
+        <AddPackModal
+          packInfo={packInfo}
+          onInstall={handleInstallPack}
+          onCancel={handleCancelPack}
+          installing={installing}
+        />
+      )}
     </div>
   );
 }
