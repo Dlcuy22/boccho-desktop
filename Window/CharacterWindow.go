@@ -92,6 +92,16 @@ func (cw *CharacterWindow) runInOSThread() {
 	}
 	defer animation.Cleanup()
 
+	// Register render context for event watcher (fixes animation freeze during window drag on Windows)
+	windowID := sdl.GetWindowID(window)
+	RegisterRenderContext(windowID, &RenderContext{
+		Renderer:  renderer,
+		Window:    window,
+		Animation: animation,
+		WindowID:  windowID,
+	})
+	defer UnregisterRenderContext(windowID)
+
 	fmt.Printf("[%s] Character window started\n", cw.id)
 	fmt.Println("  Controls: Arrow Up/Down = Scale, Escape = Close")
 

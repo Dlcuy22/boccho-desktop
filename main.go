@@ -7,6 +7,7 @@ Initializes SDL and starts Wails application with React frontend.
 */
 
 import (
+	"boccho-ui/Window"
 	"context"
 	"embed"
 	"fmt"
@@ -26,6 +27,10 @@ func main() {
 		return
 	}
 	defer sdl.Quit()
+
+	// Register event watcher for window move events (fixes animation freeze during drag on Windows)
+	eventWatcher := Window.CreateEventWatcher()
+	sdl.AddEventWatch(eventWatcher, nil)
 
 	fmt.Println("SDL initialized successfully")
 

@@ -30,6 +30,29 @@ import plusIcon from './assets/images/Plus_button.svg';
 
 const MAX_PREVIEW_FRAMES = 16;
 const ANIMATION_FPS = 12;
+const SCALE_DEBOUNCE_MS = 100;
+
+// Debounce hook for reducing IPC calls during rapid slider movement
+function useDebouncedCallback<Args extends unknown[]>(
+  callback: (...args: Args) => void,
+  delay: number
+): (...args: Args) => void {
+  const timeoutRef = useRef<number | null>(null);
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  return useCallback(
+    (...args: Args) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = window.setTimeout(() => {
+        callbackRef.current(...args);
+      }, delay);
+    },
+    [delay]
+  );
+}
 
 function AnimatedPreview({ characterName }: { characterName: string }) {
   const [frames, setFrames] = useState<string[]>([]);
@@ -193,6 +216,9 @@ function App() {
   const [packInfo, setPackInfo] = useState<PackInfo | null>(null);
   const [installing, setInstalling] = useState(false);
 
+  // Local scale state for smooth slider movement (optimistic UI)
+  const [localScales, setLocalScales] = useState<Record<string, number>>({});
+
   const loadCharacters = useCallback(async () => {
     setLoading(true);
     try {
@@ -237,12 +263,20 @@ function App() {
     }
   };
 
-  const handleScaleChange = async (windowId: string, scale: number) => {
-    try {
-      await SetCharacterScale(windowId, scale);
-    } catch (err) {
-      console.error('Failed to set scale:', err);
-    }
+  // Debounced backend call - fires after user stops dragging
+  const debouncedSetScale = useDebouncedCallback(
+    (windowId: string, scale: number) => {
+      SetCharacterScale(windowId, scale).catch((err) => {
+        console.error('Failed to set scale:', err);
+      });
+    },
+    SCALE_DEBOUNCE_MS
+  );
+
+  // Optimistic UI: immediate local update + debounced backend call
+  const handleScaleChange = (windowId: string, scale: number) => {
+    setLocalScales((prev) => ({ ...prev, [windowId]: scale }));
+    debouncedSetScale(windowId, scale);
   };
 
   const handleOpenFrames = async () => {
@@ -385,14 +419,14 @@ function App() {
                   </div>
                   <div className="window-controls">
                     <label className="scale-label">
-                      Scale: {(win.scale * 100).toFixed(0)}%
+                      Scale: {((localScales[win.id] ?? win.scale) * 100).toFixed(0)}%
                     </label>
                     <input
                       type="range"
                       className="scale-slider"
                       min="10"
                       max="200"
-                      value={win.scale * 100}
+                      value={(localScales[win.id] ?? win.scale) * 100}
                       onChange={(e) =>
                         handleScaleChange(win.id, parseInt(e.target.value) / 100)
                       }
